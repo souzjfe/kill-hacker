@@ -43,14 +43,17 @@
     indexação = denúncia e takedown rápido.
 
   >>> AJUSTE RÁPIDO PARA A SUA AULA <<<
-  Nome, ramo, telefone e endereço estão no <body>, em texto puro —
-  edite, salve e a turma só dá F5 (o servidor relê o arquivo a cada visita).
-  As cores ficam no bloco "PALETA" do CSS.
+  Nada de editar este arquivo: os textos vêm de variáveis de ambiente
+  ({{EMPRESA_NOME}}, {{CONTATO1_NOME}}, ...), trocadas em tempo de resposta
+  pelo grabber_sala.py. No Docker/Dokploy, é só preencher no painel de
+  Environment do compose. Os valores padrão estão em INFO_PADRAO, no
+  grabber_sala.py, e valem quando a variável não é definida.
+
   O /beacon.js no fim é o que faz a captura — não remova se quiser
   que o painel registre a visita.
 -->
 <meta name="robots" content="noindex, nofollow">
-<title>Contatos — Aurora Serviços</title>
+<title>Contatos — {{EMPRESA_NOME}}</title>
 
 <style>
   /* ---- PALETA: só cores. O nome/telefone da empresa ficam no <body>. ---- */
@@ -235,22 +238,6 @@
     font-weight: 600;
   }
 
-  .copiado {
-    position: fixed;
-    left: 50%;
-    bottom: 26px;
-    transform: translate(-50%, 12px);
-    padding: 9px 16px;
-    border-radius: 999px;
-    background: #14181f;
-    color: #fff;
-    font-size: .8rem;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity .18s ease, transform .18s ease;
-  }
-  .copiado.visivel { opacity: 1; transform: translate(-50%, 0); }
-
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
@@ -267,26 +254,35 @@
   <!-- Logo em CSS. Atacante real usaria a imagem real da empresa (hotlink
        ou cópia local) — e hotlink é uma das formas de vazar o IP da VÍTIMA
        para um servidor de terceiros. -->
-  <div class="logo" aria-hidden="true">A</div>
+  <div class="logo" aria-hidden="true">{{EMPRESA_INICIAL}}</div>
 
-  <h1>Aurora Serviços</h1>
-  <p class="ramo">Assessoria contábil e empresarial</p>
-  <p class="bio">Canais oficiais de atendimento da matriz.</p>
+  <h1>{{EMPRESA_NOME}}</h1>
+  <p class="ramo">{{EMPRESA_RAMO}}</p>
+  <p class="bio">{{EMPRESA_BIO}}</p>
 
   <nav class="links" aria-label="Contatos">
 
     <!--
-      O ÚNICO contato da página: Secretaria.
-      Número inexistente de propósito — (11) 0000-0000 não é um fixo válido
-      (fixo no Brasil começa com 2, 3, 4 ou 5). O link `tel:` abaixo vai
-      abrir o discador do celular e falhar.
+      TRÊS contatos, TODOS fictícios. Os números são inválidos de propósito:
+      fixo brasileiro começa com 2, 3, 4 ou 5 — então 0000-xxxx não existe.
+      O aluno vai olhar isso e não vai conferir. É o ponto da aula.
 
-      >>> Num golpe real, o "tel:" pode ser trocado por: <<<
-      - link de WhatsApp (wa.me/55...): entrega o número de quem clicou.
-      - link encurtado que passa por 2 redirecionadores antes do destino.
-      - link para um "portal de vagas" que pede CPF e senha.
+      >>> Num golpe real, cada um desses botões teria uma função: <<<
+      - SECRETARIA: só a isca para gerar o clique. É o contato "inofensivo"
+        que faz a página parecer institucional.
+      - RH: o mais rentável. "Envie seu currículo para vagas abertas" coleta
+        nome completo, CPF, RG, endereço, telefone e histórico profissional —
+        matéria-prima de fraude de identidade e de crédito. Golpe de falso
+        processo seletivo é rotina, principalmente contra quem está
+        desempregado e com pressa.
+      - CONTÁBIL / FINANCEIRO: fraude de boleto e nota fiscal. Pedir "o
+        boleto atualizado" ou "a NF para o pagamento" muda a conta de destino
+        (BEC). A vítima paga certo, para o CNPJ errado.
+      - E o `tel:` poderia virar `wa.me` (entrega o número de quem clicou),
+        link encurtado (2 redirecionadores antes do destino) ou um "portal de
+        vagas" que pede CPF e senha.
     -->
-    <a class="botao principal" href="tel:+551100000000">
+    <a class="botao principal" href="tel:{{CONTATO1_TEL}}">
       <span class="icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -298,62 +294,64 @@
         </svg>
       </span>
       <span class="rotulo">
-        <strong>Secretaria</strong>
-        <small>(11) 0000-0000</small>
+        <strong>{{CONTATO1_NOME}}</strong>
+        <small>{{CONTATO1_CARGO}} · {{CONTATO1_NUMERO}}</small>
       </span>
     </a>
 
-    <button class="botao secundario" type="button" id="copiar">
+    <a class="botao secundario" href="tel:{{CONTATO2_TEL}}">
       <span class="icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="12" height="12" rx="2"/>
-          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
       </span>
       <span class="rotulo">
-        <strong>Copiar número</strong>
-        <small>Para salvar na agenda</small>
+        <strong>{{CONTATO2_NOME}}</strong>
+        <small>{{CONTATO2_CARGO}} · {{CONTATO2_NUMERO}}</small>
       </span>
-    </button>
+    </a>
+
+    <a class="botao secundario" href="tel:{{CONTATO3_TEL}}">
+      <span class="icone" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="2" width="16" height="20" rx="2"/>
+          <line x1="8" y1="6" x2="16" y2="6"/>
+          <line x1="8" y1="11" x2="8" y2="11.01"/>
+          <line x1="12" y1="11" x2="12" y2="11.01"/>
+          <line x1="16" y1="11" x2="16" y2="11.01"/>
+          <line x1="8" y1="16" x2="8" y2="16.01"/>
+          <line x1="12" y1="16" x2="12" y2="16.01"/>
+          <line x1="16" y1="16" x2="16" y2="16.01"/>
+        </svg>
+      </span>
+      <span class="rotulo">
+        <strong>{{CONTATO3_NOME}}</strong>
+        <small>{{CONTATO3_CARGO}} · {{CONTATO3_NUMERO}}</small>
+      </span>
+    </a>
 
   </nav>
 
   <div class="divisor">Horário</div>
 
   <p class="horario">
-    Segunda a sexta, das 8h às 17h<br>
-    Presencial: Av. das Acácias, 1200 — Centro
+    {{EMPRESA_HORARIO}}<br>
+    Presencial: {{EMPRESA_ENDERECO}}
   </p>
 
   <div class="rodape">
-    © 2026 Aurora Serviços Ltda.<br>
-    CNPJ 00.000.000/0001-00
+    © 2026 {{EMPRESA_NOME}} Ltda.<br>
+    CNPJ {{EMPRESA_CNPJ}}
     <br>
     <span class="selo-aula" id="selo">Demonstração de aula — empresa fictícia</span>
   </div>
 
 </main>
-
-<div class="copiado" id="toast" role="status" aria-live="polite">Número copiado</div>
-
-<script>
-/* Copiar número — só isso de JavaScript "de interface" nesta página.
-   Note que o texto vem do DOM, então se o professor mudar o número no HTML,
-   o botão acompanha. */
-document.getElementById("copiar").addEventListener("click", async (ev) => {
-  const botao = ev.currentTarget;
-  const numero = botao.previousElementSibling.querySelector("small").textContent.trim();
-  try {
-    await navigator.clipboard.writeText(numero);
-  } catch {
-    /* Sem HTTPS o clipboard pode ser bloqueado — fallback silencioso. */
-  }
-  const toast = document.getElementById("toast");
-  toast.classList.add("visivel");
-  setTimeout(() => toast.classList.remove("visivel"), 1600);
-});
-</script>
 
 <!--
   ============================================================================

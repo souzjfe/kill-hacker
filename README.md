@@ -52,8 +52,9 @@ descreve um dispositivo e uma rotina com bastante precisão.
 demonstração de coleta de dados naquela aula e que a participação é
 voluntária (quem não quiser participar simplesmente não abre o link). O link
 é apresentado como "o contato da secretaria" e **nada mais é explicado**. A
-página é uma tela de contatos de uma empresa fictícia (Aurora Serviços),
-com um único contato de secretaria e um telefone inexistente.
+página é uma tela de contatos de uma empresa fictícia (Aurora Serviços), com
+três contatos de fachada — **Kelly (secretaria)**, **RH** e **Contábil** —
+todos com nome, cargo e telefone inventados (e números inválidos).
 
 Depois de ~10 minutos, o painel é aberto no telão e cada aluno se reconhece
 nos próprios dados. Só então a coleta é explicada.
@@ -114,18 +115,35 @@ O repositório já vem com `Dockerfile` e `docker-compose.yml`.
 
 1. Dokploy → **Create Application** → provider **Docker Compose**.
 2. Aponte para este repositório, branch `main`, arquivo `docker-compose.yml`.
-3. Em **Environment**, defina:
+3. Em **Environment**, preencha as variáveis (todas já estão declaradas no
+   `docker-compose.yml`, com padrão — você só sobrescreve o que quiser):
 
-   ```env
-   TOKEN_PAINEL=uma-senha-sua          # senha do painel (obrigatório na prática)
-   URL_PUBLICA=https://contatos.seudominio.com
-   DIVULGAR=1                          # 1 = mantém o selo de aula
-   ```
+   | Variável | Padrão | Para que serve |
+   |---|---|---|
+   | `PORTA` | `8000` | porta do container, do mapeamento e do healthcheck |
+   | `TOKEN_PAINEL` | *(sorteado)* | senha do `/painel` — **defina** |
+   | `URL_PUBLICA` | — | domínio, só para o log de inicialização |
+   | `DIVULGAR` | `1` | `0` remove o selo "demonstração de aula" |
+   | `DESTINO` | — | URL para onde `/r` redireciona |
+   | `EMPRESA_NOME` | `Aurora Serviços` | nome da empresa fictícia |
+   | `EMPRESA_RAMO` | `Assessoria contábil...` | linha abaixo do nome |
+   | `EMPRESA_BIO` | `Canais oficiais...` | texto de apoio |
+   | `EMPRESA_CNPJ` | `00.000.000/0001-00` | rodapé (dígito inválido de propósito) |
+   | `EMPRESA_ENDERECO` | `Av. das Acácias, 1200` | endereço no rodapé |
+   | `EMPRESA_HORARIO` | `Segunda a sexta...` | horário de atendimento |
+   | `CONTATO1_*` | Kelly Moreira / Secretaria | botão em destaque |
+   | `CONTATO2_*` | Recursos Humanos / RH | segundo contato |
+   | `CONTATO3_*` | Contábil / Financeiro | terceiro contato |
+
+   Cada contato tem `_NOME`, `_CARGO` e `_NUMERO`. O link `tel:` é gerado
+   sozinho a partir do número (aceita `(11) 99999-9999`, `11 99999-9999` ou
+   `+55 11 99999-9999`).
 
    Sem `TOKEN_PAINEL`, o app sorteia um token novo a cada boot e o link do
    painel muda a cada deploy (o valor aparece no log do container).
 
-4. Em **Domains**, aponte o domínio para a porta `8000`.
+4. Em **Domains**, aponte o domínio para a porta `8000` (ou a que você pôs
+   em `PORTA`).
 5. Deploy. O healthcheck bate em `/health`.
 
 Para ler o log (o volume `dados` guarda as capturas):
@@ -180,9 +198,10 @@ como um atacante real faria. É o material da aula, não o programa.
 2. **10 min — o painel.** Abra `/painel`. Cada aluno se reconhece pelo fuso,
    pela tela e pelo idioma. Pergunte: *"quem aqui foi avisado?"* Ninguém foi.
    Não houve senha, pop-up de cookie ou pedido de permissão.
-3. **10 min — o telefone falso.** `(11) 0000-0000` não existe (fixo brasileiro
-   começa com 2–5) e o CNPJ tem dígito inválido. Ninguém conferiu. O ataque é
-   **social**, não técnico.
+3. **10 min — os telefones falsos.** `(11) 0000-0000/0001/0002` não existem
+   (fixo brasileiro começa com 2–5) e o CNPJ tem dígito inválido. Ninguém
+   conferiu. Pergunte quem tentaria ligar para o RH antes de mandar currículo.
+   O ataque é **social**, não técnico.
 4. **10 min — IP não é identidade.** Mesmo aluno em: Wi-Fi da universidade
    (NAT compartilhado), dados móveis (IP da operadora), VPN (IP do provedor).
    O IP muda; fuso, idioma e fingerprint, não.
@@ -206,16 +225,20 @@ como um atacante real faria. É o material da aula, não o programa.
   ninguém clicar. O log mostra `tipo: "pagina"` antes de qualquer `beacon`.
 - **`tel:` pode virar `wa.me`**, link encurtado ou portal que pede CPF. Trocar
   o `href` da máscara e discutir o efeito é um exercício de 5 minutos.
+- **O único JavaScript da fachada é o de coleta.** Não há script de interface,
+  nem framework, nem biblioteca: `grep -n "<script src" mascara.html` retorna
+  uma única linha (o `beacon.js`). Isso mostra que "site bonito" não exige
+  dependência nenhuma — e que dá para rastrear alguém com 60 linhas.
 
 ## Estrutura
 
 ```
-grabber_sala.py      servidor + rotas + log (Python puro, biblioteca padrão)
-mascara.html         fachada: contatos da empresa fictícia
+grabber_sala.py      servidor + rotas + log + textos da fachada (Python puro)
+mascara.html         fachada: contatos da empresa fictícia (com {{placeholders}})
 beacon.js            coleta no navegador (o "analytics" da isca)
 Dockerfile           imagem python:slim, usuário não-root, healthcheck
-docker-compose.yml   stack para o Dokploy (volume para o log, limites)
-.env.example         variáveis que valem configurar
+docker-compose.yml   stack para o Dokploy (env, volume do log, limites)
+.env.example         todas as variáveis, prontas para copiar
 ```
 
 ## Licença

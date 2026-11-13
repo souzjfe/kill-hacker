@@ -40,6 +40,7 @@ import socket
 import sys
 import threading
 from datetime import datetime, timezone
+from html import escape as escapar_html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -59,10 +60,75 @@ CONFIG = {
     "mascara": BASE_DIR / "mascara.html",   # a fachada servida em /
     "divulgar": True,                # mantém o selo "demonstração de aula"
     "log": ARQ_LOG_PADRAO,           # onde as capturas são gravadas
+    "info": None,                    # textos da fachada (env > padrão)
 }
 
 # Remove o selinho de transparência quando se roda com --sem-divulgar.
 _SELO_AULA = re.compile(r'<span class="selo-aula".*?</span>', re.S)
+
+# Evita repetir o aviso de placeholder sem valor a cada request.
+_avisou_placeholder = False
+
+# ---------------------------------------------------------------------------
+# Textos da fachada (mascara.html). Tudo pode ser trocado por variável de
+# ambiente, para o professor não precisar editar arquivo — no Dokploy é só
+# preencher no Environment do compose.
+#
+# Os números abaixo são INEXISTENTES de propósito: fixo brasileiro começa com
+# 2, 3, 4 ou 5, então 0000-xxxx não existe. (O CNPJ também tem dígito
+# verificador inválido.) É a pista falsa nº 1 da aula: ninguém confere.
+# ---------------------------------------------------------------------------
+INFO_PADRAO = {
+    "EMPRESA_NOME": "Aurora Serviços",
+    "EMPRESA_RAMO": "Assessoria contábil e empresarial",
+    "EMPRESA_BIO": "Canais oficiais de atendimento da matriz.",
+    "EMPRESA_CNPJ": "00.000.000/0001-00",
+    "EMPRESA_ENDERECO": "Av. das Acácias, 1200 — Centro",
+    "EMPRESA_HORARIO": "Segunda a sexta, das 8h às 17h",
+    "CONTATO1_NOME": "Kelly Moreira",
+    "CONTATO1_CARGO": "Secretaria",
+    "CONTATO1_NUMERO": "(11) 0000-0000",
+    "CONTATO2_NOME": "Recursos Humanos",
+    "CONTATO2_CARGO": "RH",
+    "CONTATO2_NUMERO": "(11) 0000-0001",
+    "CONTATO3_NOME": "Contábil",
+    "CONTATO3_CARGO": "Financeiro",
+    "CONTATO3_NUMERO": "(11) 0000-0002",
+}
+
+
+def so_digitos(texto):
+    return re.sub(r"\D", "", texto or "")
+
+
+def tel_href(numero, ddi="55"):
+    """
+    Converte "(11) 0000-0000" no href "tel:+551100000000".
+
+    Se o professor digitar o número já com DDI, não duplica. Número vazio
+    vira href vazio (o link não disca nada) em vez de "tel:" quebrado.
+    """
+    digitos = so_digitos(numero)
+    if not digitos:
+        return ""
+    if len(digitos) > 11 or digitos.startswith(ddi):
+        return "+" + digitos
+    return f"+{ddi}{digitos}"
+
+
+def montar_info():
+    """
+    Monta o dicionário de substituição da fachada: env > padrão.
+
+    O valor é escapado depois, na hora de injetar no HTML — sem isso, uma
+    variável de ambiente com "<script>" viraria execução de código na página.
+    (Sim: isso já aconteceu em produto de verdade.)
+    """
+    info = {chave: os.environ.get(chave, padrao) for chave, padrao in INFO_PADRAO.items()}
+    info["EMPRESA_INICIAL"] = (info["EMPRESA_NOME"].strip()[:1] or "A").upper()
+    for i in (1, 2, 3):
+        info[f"CONTATO{i}_TEL"] = tel_href(info[f"CONTATO{i}_NUMERO"])
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -492,23 +558,37 @@ class Handler(BaseHTTPRequestHandler):
 
     def _mascara(self):
         """
-        Lê mascara.html do disco a cada request.
+        Lê mascara.html do disco a cada request e troca os {{PLACEHOLDERS}}
+        pelos valores de ambiente (empresa, contatos, endereço).
 
-        Isso é de propósito: o professor edita o nome da empresa, salva e a
-        turma só dá F5 — sem reiniciar o servidor. Custa nada (arquivo pequeno).
+        Ler do disco a cada visita custa nada (arquivo pequeno) e permite
+        editar o HTML e só dar F5, sem reiniciar o servidor.
         """
         try:
-            html = CONFIG["mascara"].read_text(encoding="utf-8")
+            pagina = CONFIG["mascara"].read_text(encoding="utf-8")
         except OSError:
             return PAGINA_ISCA     # sem máscara? cai na página de quiz
+
+        info = CONFIG.get("info") or montar_info()
+        for chave, valor in info.items():
+            pagina = pagina.replace("{{" + chave + "}}",
+                                    escapar_html(str(valor), quote=True))
+
+        # Placeholder que sobrou = nome de variável errado. Avisa uma vez no
+        # terminal em vez de servir "{{CONTATO4_NOME}}" na cara da turma.
+        global _avisou_placeholder
+        if "{{" in pagina and not _avisou_placeholder:
+            _avisou_placeholder = True
+            sobrou = re.findall(r"\{\{[A-Z0-9_]+\}\}", pagina)[:5]
+            print(f"  [aviso] placeholders sem valor: {', '.join(sobrou)}")
 
         if not CONFIG["divulgar"]:
             # Remove o selinho "demonstração de aula" da máscara.
             # >>> É o único elemento da página que denuncia o exercício.
             #     Um golpe real nunca teria esse selo — e é justamente essa
             #     ausência que faz a vítima confiar. <<<
-            html = _SELO_AULA.sub("", html)
-        return html
+            pagina = _SELO_AULA.sub("", pagina)
+        return pagina
 
     def _ler_beacon_js(self):
         try:
@@ -603,6 +683,7 @@ def main():
 
     CONFIG["destino"] = args.destino
     CONFIG["divulgar"] = not args.sem_divulgar
+    CONFIG["info"] = montar_info()
 
     # Token fixo vem do ambiente (obrigatório no Docker: se fosse aleatório a
     # cada boot, o container reiniciaria e o link do painel mudaria sozinho).
@@ -631,6 +712,9 @@ def main():
     print(f"  Isca com redirect  :  {base}/r" + ("  (destino: " + args.destino + ")" if args.destino else ""))
     print(f"  Painel do professor:  {base}/painel{token_q}")
     print(f"  Fachada em uso     :  {CONFIG['mascara']}")
+    print(f"  Empresa (fachada)  :  {CONFIG['info']['EMPRESA_NOME']}  |  "
+          f"{CONFIG['info']['CONTATO1_NOME']} / {CONFIG['info']['CONTATO2_NOME']} / "
+          f"{CONFIG['info']['CONTATO3_NOME']}")
     print(f"  Selo de aula       :  {'visível' if CONFIG['divulgar'] else 'REMOVIDO (--sem-divulgar)'}")
     print(f"  Log                :  {CONFIG['log']}")
     print("-" * 66)
