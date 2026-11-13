@@ -79,6 +79,11 @@
       conexao: nav.connection && nav.connection.effectiveType,
       ua_completo: nav.userAgent,
       referencia: document.referrer || null,
+      storage: {
+        localStorage: !!window.localStorage,
+        sessionStorage: !!window.sessionStorage,
+        indexedDB: !!window.indexedDB,
+      },
     online: nav.onLine,
     cookieEnabled: nav.cookieEnabled,
   };
