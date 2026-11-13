@@ -79,7 +79,9 @@
       conexao: nav.connection && nav.connection.effectiveType,
       ua_completo: nav.userAgent,
       referencia: document.referrer || null,
-    };
+    online: nav.onLine,
+    cookieEnabled: nav.cookieEnabled,
+  };
   }
 
   // --- 2. Envio ------------------------------------------------------------

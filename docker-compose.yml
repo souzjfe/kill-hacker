@@ -26,6 +26,9 @@ services:
       PORTA: "${PORTA:-8000}"
       HOST: "0.0.0.0"
       ARQ_LOG: "/dados/capturas.jsonl"
+      # HTML da fachada. Dentro da imagem ele está em /app/mascara.html.
+      # Declarado aqui para não existir variável "escondida" no código.
+      MASCARA: "${MASCARA:-/app/mascara.html}"
 
       # ---------- painel e comportamento ----------
       # Senha do /painel. Sem isso, o token é sorteado a cada boot e o link

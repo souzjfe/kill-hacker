@@ -828,8 +828,8 @@ class Handler(BaseHTTPRequestHandler):
                 permitidas = {
                     "idioma", "idiomas", "fuso", "deslocamento_min", "tela",
                     "janela", "densidade", "nucleos", "memoria_gb", "toque",
-                    "plataforma", "conexao", "ua_completo", "referencia",
-                    "segundos_na_pagina",
+                    "online", "cookieEnabled", "plataforma", "conexao", "ua_completo",
+                    "referencia", "segundos_na_pagina",
                 }
                 registro["navegador"] = {
                     k: (v[:200] if isinstance(v, str) else v)

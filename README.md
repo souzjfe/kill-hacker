@@ -121,6 +121,9 @@ O repositório já vem com `Dockerfile` e `docker-compose.yml`.
    | Variável | Padrão | Para que serve |
    |---|---|---|
    | `PORTA` | `8000` | porta do container, do mapeamento e do healthcheck |
+   | `HOST` | `0.0.0.0` | interface em que o servidor escuta (não mude no Docker) |
+   | `ARQ_LOG` | `/dados/capturas.jsonl` | onde o log é gravado (dentro do volume) |
+   | `MASCARA` | `/app/mascara.html` | HTML da fachada (caminho dentro da imagem) |
    | `TOKEN_PAINEL` | *(sorteado)* | senha do `/painel` — **defina** |
    | `URL_PUBLICA` | — | domínio, só para o log de inicialização |
    | `DIVULGAR` | `1` | `0` remove o selo "demonstração de aula" |
