@@ -56,8 +56,8 @@ página é uma tela de contatos de uma empresa fictícia (Aurora Serviços), com
 três contatos de fachada — **Kelly (secretaria)**, **RH** e **Contábil** —
 todos com nome, cargo e telefone inventados (e números inválidos).
 
-Depois de ~10 minutos, o painel é aberto no telão e cada aluno se reconhece
-nos próprios dados. Só então a coleta é explicada.
+Depois de ~10 minutos, a tela `/aula` é aberta no telão e cada aluno se
+reconhece nos próprios dados. Só então a coleta é explicada.
 
 **O que é medido (agregado, em sala):**
 
@@ -175,16 +175,27 @@ docker compose down -v      # remove o volume junto
 | `/` | a isca: contatos da empresa fictícia + captura |
 | `/quiz` | página alternativa, mais "honesta", para comparar |
 | `/r` | captura e redireciona na hora para `--destino` (isca clássica) |
-| `/painel` | painel do professor (token aleatório no boot, ou `TOKEN_PAINEL`) |
+| `/painel` | painel do professor, detalhado (token no boot, ou `TOKEN_PAINEL`) |
+| `/aula` (e `/telao`) | tela grande para projetar: 1 linha por aluno, atualiza a cada 2 s, IP mascarado |
+| `/api/aula` | os dados da tela da aula em JSON (IP completo só com `?t=TOKEN`) |
 | `/beacon.js` | o script de coleta que a isca carrega |
 | `/health` | healthcheck do container |
+
+**`/painel` × `/aula`:** o painel é o seu caderno (tudo, IP completo, token). A
+`/aula` é o telão: números grandes, uma linha por visitante, auto-refresh e
+**IP mascarado** (`203.0.113.•••`) — o aluno se reconhece pelo horário, pelo
+fuso e pelo aparelho, sem expor o IP do colega. Abra `/aula?t=SEU_TOKEN` na
+hora de revelar os IPs.
 
 ## O que é capturado de verdade
 
 - IP de origem, `User-Agent`, `Referer`, `Accept-Language`, `Host`, data/hora;
 - `X-Forwarded-For`, quando existe — **marcado no painel como falsificável**;
 - idioma, fuso, tamanho de tela, núcleos de CPU, tipo de conexão (via JS);
-- segundos de permanência na página.
+- segundos de permanência na página;
+- um **cookie de sessão** (`sid`, 2 h) só para juntar "abriu a página" +
+  "mandou o beacon" na mesma linha. Sem ele, 30 alunos no Wi-Fi da faculdade
+  (mesmo IP público) com o mesmo celular virariam uma linha só.
 
 O resto — geolocalização por API, fingerprint de canvas/WebGL, WebRTC,
 cookie persistente, ofuscação, cloaking, exfiltração por webhook — está
@@ -195,9 +206,11 @@ como um atacante real faria. É o material da aula, não o programa.
 
 1. **10 min — a isca.** Projete o link/QR de `/` no telão. Diga só: "preciso
    que vocês acessem esse contato da secretaria". Não explique nada ainda.
-2. **10 min — o painel.** Abra `/painel`. Cada aluno se reconhece pelo fuso,
-   pela tela e pelo idioma. Pergunte: *"quem aqui foi avisado?"* Ninguém foi.
-   Não houve senha, pop-up de cookie ou pedido de permissão.
+2. **10 min — a tela da aula.** Abra `/aula` (ou `/telao`) no telão, com fonte
+   grande e auto-refresh. Cada aluno se reconhece pelo horário, pelo fuso, pela
+   tela e pelo aparelho. Pergunte: *"quem aqui foi avisado?"* Ninguém foi.
+   Não houve senha, pop-up de cookie ou pedido de permissão. Se quiser mostrar
+   o IP completo, abra `/aula?t=SEU_TOKEN` (ou use o `/painel`).
 3. **10 min — os telefones falsos.** `(11) 0000-0000/0001/0002` não existem
    (fixo brasileiro começa com 2–5) e o CNPJ tem dígito inválido. Ninguém
    conferiu. Pergunte quem tentaria ligar para o RH antes de mandar currículo.
@@ -225,6 +238,10 @@ como um atacante real faria. É o material da aula, não o programa.
   ninguém clicar. O log mostra `tipo: "pagina"` antes de qualquer `beacon`.
 - **`tel:` pode virar `wa.me`**, link encurtado ou portal que pede CPF. Trocar
   o `href` da máscara e discutir o efeito é um exercício de 5 minutos.
+- **Cookie de sessão sem pedir licença.** A primeira visita a `/` recebe um
+  `sid` (2 h) — o mesmo que `_ga` (Analytics) e `_fbp` (Meta) fazem. É o que
+  separa dois alunos atrás do mesmo NAT, e o que o "modo anônimo" apaga quando
+  você fecha a janela (mas não entre abas).
 - **O único JavaScript da fachada é o de coleta.** Não há script de interface,
   nem framework, nem biblioteca: `grep -n "<script src" mascara.html` retorna
   uma única linha (o `beacon.js`). Isso mostra que "site bonito" não exige

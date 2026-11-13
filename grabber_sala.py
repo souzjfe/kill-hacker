@@ -195,6 +195,16 @@ CABECALHOS_INTERESSANTES = (
 # da aula é entender a coleta, não construir o produto.
 
 
+def ler_cookie(handler, nome):
+    """Lê um cookie do cabeçalho Cookie (formato: 'a=1; b=2')."""
+    bruto = handler.headers.get("Cookie", "")
+    for pedaco in bruto.split(";"):
+        chave, _, valor = pedaco.strip().partition("=")
+        if chave == nome:
+            return valor.strip()
+    return ""
+
+
 def montar_registro(handler, tipo):
     ip, confiavel, xff = descobrir_ip(handler)
     agora = datetime.now(timezone.utc)
@@ -206,6 +216,12 @@ def montar_registro(handler, tipo):
         "ip": ip,
         "ip_confiavel": confiavel,    # False = veio de X-Forwarded-For
         "x_forwarded_for": xff,
+        # Identificador de sessão (cookie first-party, 2 h). Não é "login":
+        # é o mínimo para juntar o GET / com o POST do beacon e não misturar
+        # dois alunos que compartilham o mesmo IP (NAT) e o mesmo aparelho.
+        # >>> É exatamente o que Google Analytics/Facebook Pixel fazem com
+        #     _ga/_fbp — e o que o modo anônimo ainda guarda durante a aba. <<<
+        "sessao": getattr(handler, "_sid", None),
         "metodo": handler.command,
         "caminho": handler.path,
         "cabecalhos": {
@@ -239,6 +255,102 @@ def imprimir(registro):
     if nav:
         print(f"    fuso: {nav.get('fuso')} | idioma: {nav.get('idioma')} | "
               f"tela: {nav.get('tela')} | cores: {nav.get('nucleos')}")
+
+
+# ---------------------------------------------------------------------------
+# 2b. Agregação para a página de aula (/aula)
+# ---------------------------------------------------------------------------
+def mascarar_ip(ip):
+    """
+    Esconde a última parte do IP para a tela pública da sala.
+
+    O objetivo da aula é o aluno se reconhecer (fuso, tela, horário), não
+    expor o IP de colega no telão — e, se a aplicação estiver publicada, não
+    expor IP de ninguém para quem abrir a página. IP completo só no /painel.
+
+    >>> Um atacante real faz o contrário: junta o IP completo com nome,
+    matrícula e foto, e publica. É assim que "doxxing" começa. <<<
+    """
+    if not ip:
+        return "-"
+    if ":" in ip:                      # IPv6
+        partes = ip.split(":")
+        return ":".join(partes[:4]) + ":••••"
+    partes = ip.split(".")
+    if len(partes) == 4:               # IPv4
+        return ".".join(partes[:3] + ["•••"])
+    return ip
+
+
+def dispositivo(user_agent):
+    """Rótulo curto de dispositivo a partir do User-Agent (para a tabela)."""
+    ua = (user_agent or "").lower()
+    if not ua:
+        return "—"
+    if "iphone" in ua:
+        return "iPhone"
+    if "ipad" in ua:
+        return "iPad"
+    if "android" in ua:
+        return "Android"
+    if "windows" in ua:
+        return "Windows"
+    if "macintosh" in ua or "mac os" in ua:
+        return "Mac"
+    if "linux" in ua:
+        return "Linux"
+    if any(x in ua for x in ("curl", "wget", "python", "go-http", "bot", "spider")):
+        return "script/bot"
+    return "outro"
+
+
+def agrupar_visitas(registros):
+    """
+    Junta os vários registros de um mesmo visitante em UMA linha.
+
+    Cada visita gera 2–3 registros (GET /, POST do beacon, beacon de saída).
+    Na tabela da aula isso vira uma linha só: primeira e última vez, se
+    clicou de fato ou só carregou preview, e tempo de permanência.
+
+    >>> Um atacante real agrupa por muito mais que IP + UA: cookie, id de
+    sessão, fingerprint de canvas, horário. Aqui é o mínimo para a tabela
+    não ficar repetida. <<<
+    """
+    visitas = {}
+    for r in registros:
+        cab = r.get("cabecalhos") or {}
+        ua = cab.get("User-Agent") or ""
+        # IP + UA + sessão: sem a sessão, 30 alunos no Wi-Fi da faculdade
+        # (mesmo IP público) com o mesmo iPhone virariam 1 linha só.
+        chave = (r.get("ip") or "-", ua, r.get("sessao") or "")
+        quando = r.get("quando_local") or ""
+
+        v = visitas.get(chave)
+        if v is None:
+            v = visitas[chave] = {
+                "ip": r.get("ip") or "-",
+                "dispositivo": dispositivo(ua),
+                "primeiro": quando,
+                "ultimo": quando,
+                "clicou": False,
+                "segundos": None,
+                "navegador": None,
+                "ip_confiavel": bool(r.get("ip_confiavel", True)),
+            }
+        v["primeiro"] = min(v["primeiro"], quando) if v["primeiro"] else quando
+        v["ultimo"] = max(v["ultimo"], quando) if v["ultimo"] else quando
+
+        if r.get("tipo") in ("beacon", "redirect"):
+            v["clicou"] = True
+        nav = r.get("navegador") or {}
+        if nav:
+            v["navegador"] = nav
+            seg = nav.get("segundos_na_pagina")
+            if isinstance(seg, (int, float)):
+                v["segundos"] = max(v["segundos"] or 0, seg)
+
+    # Mais recente primeiro.
+    return sorted(visitas.values(), key=lambda x: x["ultimo"], reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +428,180 @@ PAGINA_ISCA = """<!doctype html>
 
 <!-- A coleta vive em /beacon.js, arquivo separado, igual a um analytics. -->
 <script src="/beacon.js" defer></script>
+</body>
+</html>
+"""
+
+PAGINA_AULA = """<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ao vivo — o que o servidor viu</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 22px 48px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f5f7fa; color: #111827;
+    font-size: 17px;
+  }
+  .topo {
+    display: flex; align-items: baseline; gap: 14px;
+    flex-wrap: wrap; margin-bottom: 4px;
+  }
+  h1 { font-size: 1.65rem; margin: 0; letter-spacing: -.02em; }
+  .ao-vivo {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: .78rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: #b91c1c;
+  }
+  .ponto {
+    width: 9px; height: 9px; border-radius: 50%; background: #dc2626;
+    animation: pulso 1.4s ease-in-out infinite;
+  }
+  @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  .sub { color: #6b7280; font-size: .95rem; margin: 2px 0 22px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+           gap: 14px; margin-bottom: 22px; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+    padding: 16px 18px; box-shadow: 0 1px 2px rgba(16,24,40,.04);
+  }
+  .card .rotulo { font-size: .76rem; text-transform: uppercase; letter-spacing: .06em;
+                  color: #6b7280; font-weight: 600; }
+  .card .valor { font-size: 2.15rem; font-weight: 700; line-height: 1.15; margin-top: 4px;
+                 font-variant-numeric: tabular-nums; }
+  .card .detalhe { font-size: .8rem; color: #6b7280; margin-top: 2px; }
+
+  .tabela-wrap {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+    overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.04);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    position: sticky; top: 0; background: #eef2f7;
+    font-size: .74rem; text-transform: uppercase; letter-spacing: .06em;
+    color: #4b5563; text-align: left; padding: 12px 16px; white-space: nowrap;
+  }
+  tbody td { padding: 14px 16px; border-top: 1px solid #f0f2f5; vertical-align: middle; }
+  tbody tr:nth-child(even) { background: #fbfcfe; }
+  td.num { color: #9ca3af; font-variant-numeric: tabular-nums; width: 46px; }
+  td.ip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-weight: 600; white-space: nowrap; }
+  td.hora { font-variant-numeric: tabular-nums; white-space: nowrap; color: #374151; }
+  .pilula {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: .76rem; font-weight: 600; white-space: nowrap;
+  }
+  .clicou { background: #dcfce7; color: #166534; }
+  .preview { background: #fef3c7; color: #92400e; }
+  .fraco { color: #6b7280; }
+  .vazio { padding: 56px 20px; text-align: center; color: #6b7280; }
+  .vazio strong { display: block; font-size: 1.1rem; color: #374151; margin-bottom: 6px; }
+
+  .nota { margin-top: 18px; color: #6b7280; font-size: .85rem; max-width: 70ch; }
+  .nota code { background: #e8edf5; padding: 1px 6px; border-radius: 4px; }
+
+  @media (max-width: 720px) {
+    body { padding: 18px 12px 32px; font-size: 15px; }
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(6), td:nth-child(6) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <h1>O que o servidor viu</h1>
+  <span class="ao-vivo"><span class="ponto"></span> ao vivo</span>
+</div>
+<p class="sub">
+  Atualiza sozinho a cada 2 segundos. Uma linha por visita.
+</p>
+
+<div class="cards" id="cards"></div>
+
+<div class="tabela-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Hora</th><th>IP</th><th>Dispositivo</th>
+        <th>Fuso</th><th>Tela</th><th>Tempo</th><th>Como chegou</th>
+      </tr>
+    </thead>
+    <tbody id="corpo"></tbody>
+  </table>
+  <div class="vazio" id="vazio">
+    <strong>Aguardando a primeira visita…</strong>
+    Peça para a turma abrir o link da secretaria.
+  </div>
+</div>
+
+<p class="nota" id="nota"></p>
+
+<script>
+const esc = (s) => String(s ?? "—").replace(/[&<>"]/g, c => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]
+));
+
+function segundos(v) {
+  if (v === null || v === undefined) return "—";
+  if (v < 60) return v + "s";
+  return Math.floor(v / 60) + "min " + (v % 60) + "s";
+}
+
+async function atualizar() {
+  // location.search leva o ?t=TOKEN quando o professor abre com token.
+  const r = await fetch("/api/aula" + location.search);
+  if (!r.ok) return;
+  const { visitas, resumo } = await r.json();
+
+  document.getElementById("cards").innerHTML = `
+    <div class="card"><div class="rotulo">Visitas</div>
+      <div class="valor">${resumo.visitas}</div></div>
+    <div class="card"><div class="rotulo">Clicaram no link</div>
+      <div class="valor">${resumo.clicaram}</div>
+      <div class="detalhe">${resumo.so_preview} só por preview</div></div>
+    <div class="card"><div class="rotulo">Dispositivos</div>
+      <div class="valor">${resumo.dispositivos.length}</div>
+      <div class="detalhe">${resumo.dispositivos.map(d => d.nome + " " + d.qtd).join(" · ") || "—"}</div></div>
+    <div class="card"><div class="rotulo">Tempo médio na página</div>
+      <div class="valor">${segundos(resumo.media_segundos)}</div></div>
+  `;
+
+  const corpo = document.getElementById("corpo");
+  corpo.innerHTML = visitas.map((v, i) => {
+    const nav = v.navegador || {};
+    const origem = v.clicou
+      ? '<span class="pilula clicou">clique</span>'
+      : '<span class="pilula preview">preview</span>';
+    return `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="hora">${esc((v.ultimo || "").slice(11, 19))}</td>
+      <td class="ip">${esc(v.ip)}</td>
+      <td>${esc(v.dispositivo)}</td>
+      <td class="fraco">${esc(nav.fuso)}</td>
+      <td class="fraco">${esc(nav.tela)}</td>
+      <td class="fraco">${segundos(v.segundos)}</td>
+      <td>${origem}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("vazio").style.display = visitas.length ? "none" : "block";
+
+  const nota = document.getElementById("nota");
+  nota.innerHTML = resumo.revelado
+    ? "IPs completos. Esta página está aberta com o token do professor."
+    : "IPs mascarados (o último bloco fica oculto). Para revelar, abra esta "
+      + "página com <code>?t=SEU_TOKEN</code>. O painel completo é <code>/painel</code>.";
+}
+
+atualizar();
+setInterval(atualizar, 2000);
+</script>
 </body>
 </html>
 """
@@ -447,6 +733,13 @@ class Handler(BaseHTTPRequestHandler):
         # Cabeçalhos de privacidade que o atacante real NÃO manda:
         # >>> ele manda zero deles, e é assim que o Referer viaja completo. <<<
         self.send_header("Referrer-Policy", "no-referrer")
+        if getattr(self, "_cookie_novo", False):
+            # Cookie de sessão: 2 h, sem HttpOnly (o JS da isca pode ler —
+            # um analytics real também lê o próprio _ga).
+            self.send_header(
+                "Set-Cookie",
+                f"sid={self._sid}; Path=/; SameSite=Lax; Max-Age=7200",
+            )
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(dados)
@@ -488,6 +781,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(self._ler_capturas())
 
+        elif rota in ("/aula", "/telao"):
+            # Tela para projetar na sala. Abre sem token, mas com IP mascarado.
+            # >>> Aqui não registramos visita: se registrasse, o professor
+            #     apareceria na própria tabela e a turma se perdia. <<<
+            self._responder(PAGINA_AULA)
+
+        elif rota == "/api/aula":
+            self._json(self._dados_aula())
+
         elif rota == "/r":
             # Rota "isca clássica": captura e joga o visitante num site real.
             # >>> Um atacante real faz exatamente isso, e o alvo nunca vê
@@ -514,6 +816,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # Não grava ainda: o beacon chega com dados do navegador no corpo,
         # então montamos o registro primeiro e gravamos uma única vez.
+        self._garantir_sessao()
         registro = montar_registro(self, "beacon")
         tamanho = int(self.headers.get("Content-Length") or 0)
         corpo = self.rfile.read(tamanho) if 0 < tamanho <= 20_000 else b""
@@ -550,7 +853,28 @@ class Handler(BaseHTTPRequestHandler):
                    self.headers.get("X-Token", ""))
         return secrets.compare_digest(enviado, token)
 
+    def _garantir_sessao(self):
+        """
+        Dá a cada visitante um id de sessão (cookie), para a tabela da aula
+        ter UMA linha por pessoa mesmo quando todos saem pelo mesmo IP (NAT
+        da universidade) e usam o mesmo modelo de celular.
+
+        >>> Um atacante real não para no cookie: casa sessão com fingerprint
+        (canvas, fontes, WebGL), e-mail e conta social. Aqui é só a sessão. <<<
+        """
+        if getattr(self, "_sid", None):
+            return self._sid
+
+        atual = ler_cookie(self, "sid")
+        if atual and len(atual) <= 64:
+            self._sid = atual
+        else:
+            self._sid = secrets.token_hex(8)
+            self._cookie_novo = True
+        return self._sid
+
     def _capturar(self, tipo):
+        self._garantir_sessao()
         registro = montar_registro(self, tipo)
         gravar(registro)
         imprimir(registro)
@@ -599,6 +923,49 @@ class Handler(BaseHTTPRequestHandler):
             # (num ataque real: falha silenciosa).
             return ("console.warn('beacon.js nao encontrado ao lado do "
                     "grabber_sala.py');")
+
+    def _dados_aula(self):
+        """
+        Dados da tela /aula: uma linha por visitante (não por registro).
+
+        Quem abre com o token do professor vê o IP completo; quem abre só a
+        /aula vê o IP mascarado. A decisão é do servidor: a página recebe o
+        dado já mascarado, não "esconde no CSS" — esconder no cliente não
+        esconde nada de quem abre o DevTools.
+
+        >>> Dá para mascarar só na tela, mas o atacante real não mascara nada:
+        ele publica o IP completo com print do perfil. <<<
+        """
+        registros = self._ler_capturas(limite=5000)["capturas"]
+        visitas = agrupar_visitas(registros)
+
+        revelar = self._autorizado()
+        if not revelar:
+            for v in visitas:
+                v["ip"] = mascarar_ip(v["ip"])
+
+        clicaram = sum(1 for v in visitas if v["clicou"])
+        tempos = [v["segundos"] for v in visitas
+                  if isinstance(v["segundos"], (int, float))]
+
+        contagem = {}
+        for v in visitas:
+            contagem[v["dispositivo"]] = contagem.get(v["dispositivo"], 0) + 1
+        dispositivos = [{"nome": nome, "qtd": qtd}
+                        for nome, qtd in sorted(contagem.items(),
+                                                key=lambda x: -x[1])]
+
+        return {
+            "visitas": visitas,
+            "resumo": {
+                "visitas": len(visitas),
+                "clicaram": clicaram,
+                "so_preview": len(visitas) - clicaram,
+                "media_segundos": round(sum(tempos) / len(tempos)) if tempos else None,
+                "dispositivos": dispositivos,
+                "revelado": revelar,
+            },
+        }
 
     def _ler_capturas(self, limite=200):
         log = CONFIG["log"]
