@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  ============================================================================
+  MASCARA.HTML — página-isca ("fachada") da demonstração
+  ============================================================================
+  Isto é uma tela de contatos de uma empresa FICTÍCIA. Não existe empresa,
+  não existe CNPJ, não existe telefone. O objetivo é mostrar à turma como um
+  link de coleta fica invisível quando vem embalado numa página plausível.
+
+  >>> COMO UM ATACANTE REAL MONTA ESSA MÁSCARA <<<
+  1. CLONAGEM: copia o HTML/CSS do site real da vítima (wget -m, HTTrack,
+     "Salvar página como"). A vítima reconhece a marca em 0,5s.
+  2. DOMÍNIO PARECIDO: auroraservicos.com.br  ->  auroraservico.com.br,
+     aurora-servicos.net, auroraservicos.com.br.oferta.xyz. Compra TLS
+     grátis no Let's Encrypt para aparecer o cadeado (o cadeado só prova
+     que o HTTPS existe, NUNCA que o site é legítimo).
+  3. LINK ENCURTADO / QR CODE: bit.ly, t.co, encurtador próprio, QR no
+     cartaz do evento. Some o domínio suspeito da vista.
+  4. CONTEXTO: manda no grupo certo, na hora certa. "Segue o contato da
+     secretaria pra quem precisa do estágio" funciona melhor que qualquer
+     exploit — é engenharia social, não falha técnica.
+  5. CLONAGEM DE IDENTIDADE: foto e nome do funcionário real, assinatura
+     de e-mail idêntica, thread de e-mail respondida de verdade (BEC).
+  6. CLOAKING: detecta IP de datacenter/VPN/scanner e mostra OUTRA página
+     (inofensiva) para quem for analisar o link.
+  7. ZERO recursos externos: nada de Google Fonts, CDN ou analytics de
+     terceiros. Assim o rastro fica só no servidor do atacante — e é por
+     isso que esta página também não carrega nada da internet.
+  ============================================================================
+
+  >>> O QUE ESTA MÁSCARA TEM DE "PISTA FALSA" (bom para a discussão) <<<
+  - O telefone (11) 0000-0000 não existe: fixo brasileiro começa com 2–5.
+    Ninguém confere. Este é o ponto pedagógico nº 1 da aula.
+  - O CNPJ 00.000.000/0001-00 tem dígito verificador inválido.
+  - A página não tem endereço, mapa, redes sociais nem política de
+    privacidade — só um botão. Contato "completo" demais é suspeito;
+    contato vazio também é.
+  - `noindex` abaixo: golpista não quer o link indexado no Google, porque
+    indexação = denúncia e takedown rápido.
+
+  >>> AJUSTE RÁPIDO PARA A SUA AULA <<<
+  Nome, ramo, telefone e endereço estão no <body>, em texto puro —
+  edite, salve e a turma só dá F5 (o servidor relê o arquivo a cada visita).
+  As cores ficam no bloco "PALETA" do CSS.
+  O /beacon.js no fim é o que faz a captura — não remova se quiser
+  que o painel registre a visita.
+-->
+<meta name="robots" content="noindex, nofollow">
+<title>Contatos — Aurora Serviços</title>
+
+<style>
+  /* ---- PALETA: só cores. O nome/telefone da empresa ficam no <body>. ---- */
+  :root {
+    --fundo-1: #f4f6fb;
+    --fundo-2: #e6ecf7;
+    --cartao: #ffffff;
+    --texto: #14181f;
+    --texto-fraco: #5f6b7a;
+    --borda: #e3e8f0;
+    --primario: #1d3f72;
+    --primario-hover: #16325c;
+    --raio: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--texto);
+    background:
+      radial-gradient(1000px 600px at 50% -10%, #ffffff 0%, transparent 70%),
+      linear-gradient(160deg, var(--fundo-1), var(--fundo-2));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .cartao {
+    width: 100%;
+    max-width: 420px;
+    background: var(--cartao);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    padding: 34px 26px 22px;
+    text-align: center;
+    box-shadow:
+      0 1px 2px rgba(16, 24, 40, .04),
+      0 12px 32px -12px rgba(16, 24, 40, .18);
+  }
+
+  /* Logo: monograma em CSS, sem imagem externa (nada de CDN) */
+  .logo {
+    width: 72px; height: 72px;
+    margin: 0 auto 16px;
+    border-radius: 22px;
+    display: grid; place-items: center;
+    background: linear-gradient(145deg, #2b548f, #16294a);
+    color: #fff;
+    font-size: 30px; font-weight: 700; letter-spacing: -.02em;
+    box-shadow: 0 8px 20px -8px rgba(29, 63, 114, .7);
+    user-select: none;
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 1.24rem;
+    letter-spacing: -.012em;
+  }
+
+  .ramo {
+    margin: 0 0 6px;
+    font-size: .875rem;
+    color: var(--texto-fraco);
+  }
+
+  .bio {
+    margin: 0 auto 24px;
+    max-width: 30ch;
+    font-size: .8rem;
+    line-height: 1.5;
+    color: var(--texto-fraco);
+  }
+
+  .links { display: grid; gap: 10px; text-align: left; }
+
+  .botao {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 16px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    text-decoration: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: transform .12s ease, background .12s ease,
+                box-shadow .12s ease, border-color .12s ease;
+  }
+
+  .botao:active { transform: scale(.988); }
+
+  .botao:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: 3px;
+  }
+
+  .icone {
+    flex: 0 0 38px;
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    display: grid; place-items: center;
+  }
+
+  .icone svg { width: 19px; height: 19px; }
+
+  .rotulo { display: grid; gap: 1px; min-width: 0; }
+  .rotulo strong { font-size: .93rem; font-weight: 600; }
+  .rotulo small  { font-size: .8rem; opacity: .72; }
+
+  /* Botão principal — o único contato da página */
+  .principal {
+    background: var(--primario);
+    color: #fff;
+    box-shadow: 0 8px 18px -10px rgba(29, 63, 114, .8);
+  }
+  .principal:hover { background: var(--primario-hover); }
+  .principal .icone {
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+  }
+
+  /* Botão secundário, discreto */
+  .secundario {
+    background: #f7f9fc;
+    border-color: var(--borda);
+    color: var(--texto);
+  }
+  .secundario:hover { background: #eef2f9; border-color: #d5dded; }
+  .secundario .icone { background: #e8eef8; color: var(--primario); }
+
+  .divisor {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 22px 2px 14px;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: #8b97a8;
+  }
+  .divisor::before, .divisor::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--borda);
+  }
+
+  .horario {
+    margin: 0 0 20px;
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--texto-fraco);
+  }
+
+  .rodape {
+    border-top: 1px solid var(--borda);
+    padding-top: 14px;
+    font-size: .68rem;
+    line-height: 1.6;
+    color: #8b97a8;
+  }
+  .rodape a { color: inherit; }
+
+  /* Selo de transparência da aula — remova com --sem-divulgar no servidor */
+  .selo-aula {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #fff4e5;
+    border: 1px solid #f2d3a8;
+    color: #92500b;
+    font-size: .68rem;
+    font-weight: 600;
+  }
+
+  .copiado {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translate(-50%, 12px);
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: #14181f;
+    color: #fff;
+    font-size: .8rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .copiado.visivel { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+
+  @media (max-width: 380px) {
+    .cartao { padding: 28px 18px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<main class="cartao">
+
+  <!-- Logo em CSS. Atacante real usaria a imagem real da empresa (hotlink
+       ou cópia local) — e hotlink é uma das formas de vazar o IP da VÍTIMA
+       para um servidor de terceiros. -->
+  <div class="logo" aria-hidden="true">A</div>
+
+  <h1>Aurora Serviços</h1>
+  <p class="ramo">Assessoria contábil e empresarial</p>
+  <p class="bio">Canais oficiais de atendimento da matriz.</p>
+
+  <nav class="links" aria-label="Contatos">
+
+    <!--
+      O ÚNICO contato da página: Secretaria.
+      Número inexistente de propósito — (11) 0000-0000 não é um fixo válido
+      (fixo no Brasil começa com 2, 3, 4 ou 5). O link `tel:` abaixo vai
+      abrir o discador do celular e falhar.
+
+      >>> Num golpe real, o "tel:" pode ser trocado por: <<<
+      - link de WhatsApp (wa.me/55...): entrega o número de quem clicou.
+      - link encurtado que passa por 2 redirecionadores antes do destino.
+      - link para um "portal de vagas" que pede CPF e senha.
+    -->
+    <a class="botao principal" href="tel:+551100000000">
+      <span class="icone" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07
+                   19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18
+                   2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2
+                   2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0
+                   0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+      </span>
+      <span class="rotulo">
+        <strong>Secretaria</strong>
+        <small>(11) 0000-0000</small>
+      </span>
+    </a>
+
+    <button class="botao secundario" type="button" id="copiar">
+      <span class="icone" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="12" height="12" rx="2"/>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </svg>
+      </span>
+      <span class="rotulo">
+        <strong>Copiar número</strong>
+        <small>Para salvar na agenda</small>
+      </span>
+    </button>
+
+  </nav>
+
+  <div class="divisor">Horário</div>
+
+  <p class="horario">
+    Segunda a sexta, das 8h às 17h<br>
+    Presencial: Av. das Acácias, 1200 — Centro
+  </p>
+
+  <div class="rodape">
+    © 2026 Aurora Serviços Ltda.<br>
+    CNPJ 00.000.000/0001-00
+    <br>
+    <span class="selo-aula" id="selo">Demonstração de aula — empresa fictícia</span>
+  </div>
+
+</main>
+
+<div class="copiado" id="toast" role="status" aria-live="polite">Número copiado</div>
+
+<script>
+/* Copiar número — só isso de JavaScript "de interface" nesta página.
+   Note que o texto vem do DOM, então se o professor mudar o número no HTML,
+   o botão acompanha. */
+document.getElementById("copiar").addEventListener("click", async (ev) => {
+  const botao = ev.currentTarget;
+  const numero = botao.previousElementSibling.querySelector("small").textContent.trim();
+  try {
+    await navigator.clipboard.writeText(numero);
+  } catch {
+    /* Sem HTTPS o clipboard pode ser bloqueado — fallback silencioso. */
+  }
+  const toast = document.getElementById("toast");
+  toast.classList.add("visivel");
+  setTimeout(() => toast.classList.remove("visivel"), 1600);
+});
+</script>
+
+<!--
+  ============================================================================
+  AQUI está a captura. É só um <script src> — igual a qualquer analytics.
+  Servido pelo grabber_sala.py em /beacon.js.
+
+  >>> Num atacante real este script estaria: <<<
+  - INLINE e no <head>, para rodar antes da pessoa fechar a aba.
+  - OFUSCADO (packer, base64 + eval, string arrays) para não ser lido.
+  - Com ofuscação de domínio e fallback: se /api falhar, tenta
+    navigator.sendBeacon, depois um <img src="...">, depois um pixel 1x1.
+  - Enviando para um domínio que imita o legítimo, ou para um webhook
+    de Discord/Telegram, para não depender de um servidor próprio.
+  ============================================================================
+-->
+<script src="/beacon.js" defer></script>
+
+</body>
+</html>

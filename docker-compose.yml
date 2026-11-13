@@ -1,0 +1,65 @@
+# docker-compose.yml — deploy no Dokploy (ou em qualquer Docker)
+#
+# Dokploy: Applications -> Create Application -> tipo "Docker Compose" ->
+# aponte para este repositório -> defina o domínio -> Deploy.
+#
+# Variáveis que valem configurar no painel do Dokploy (Environment):
+#   TOKEN_PAINEL   senha do /painel. SEM ISSO o token é aleatório a cada boot
+#                  e o link do painel muda a cada deploy.
+#   URL_PUBLICA    ex.: https://contatos.seudominio.com  (só aparece no log)
+#   DIVULGAR       1 = mantém o selo "demonstração de aula" (padrão)
+#                  0 = remove o selo (só durante a demonstração em sala)
+#   DESTINO        URL para onde /r redireciona (opcional)
+
+services:
+  grabber:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grabber-aula:latest
+    container_name: grabber-aula
+    restart: unless-stopped
+
+    # Dokploy/Traefik fala com o container nesta porta.
+    # Se o seu proxy já publica a porta, pode remover este bloco.
+    ports:
+      - "8000:8000"
+
+    environment:
+      PORTA: "8000"
+      HOST: "0.0.0.0"
+      ARQ_LOG: /dados/capturas.jsonl
+      # Troque por um valor seu. Vazio = token aleatório a cada boot.
+      TOKEN_PAINEL: ${TOKEN_PAINEL:-}
+      URL_PUBLICA: ${URL_PUBLICA:-}
+      DIVULGAR: ${DIVULGAR:-1}
+      DESTINO: ${DESTINO:-}
+
+    volumes:
+      # O log precisa sobreviver a deploy/restart. Sem volume, cada deploy
+      # apagaria as capturas da aula no meio do exercício.
+      - dados:/dados
+
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+    # Trava o consumo: é um servidor de aula, não um serviço de produção.
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dados:

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.dockerignore
+**/__pycache__
+**/*.pyc
+capturas.jsonl
+dados
+.env
+.env.example
+README.md
+.DS_Store

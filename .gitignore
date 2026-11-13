@@ -1,0 +1,12 @@
+# Capturas da aula: contêm IPs reais de pessoas. NUNCA commitar.
+capturas.jsonl
+dados/
+
+# Configuração local (token do painel, domínio, destino do redirect)
+.env
+
+# Python / SO
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
