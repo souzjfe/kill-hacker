@@ -79,10 +79,10 @@ _avisou_placeholder = False
 # verificador inválido.) É a pista falsa nº 1 da aula: ninguém confere.
 # ---------------------------------------------------------------------------
 INFO_PADRAO = {
-    "EMPRESA_NOME": "Aurora Serviços",
-    "EMPRESA_RAMO": "Assessoria contábil e empresarial",
+    "EMPRESA_NOME": "PsiWare",
+    "EMPRESA_RAMO": "Software de segurança e monitoramento",
     "EMPRESA_BIO": "Canais oficiais de atendimento da matriz.",
-    "EMPRESA_CNPJ": "00.000.000/0001-00",
+    "EMPRESA_CNPJ": "58.761.840/0001-00",
     "EMPRESA_ENDERECO": "Av. das Acácias, 1200 — Centro",
     "EMPRESA_HORARIO": "Segunda a sexta, das 8h às 17h",
     "CONTATO1_NOME": "Kelly Moreira",
